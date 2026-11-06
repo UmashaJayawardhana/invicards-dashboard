@@ -1,18 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-export default function LoginPage() {
+function LoginForm() {
   const supabase = createClient();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("error") === "inactive") {
+      setErrorMessage(
+        "Your account is currently inactive. Please contact your administrator."
+      );
+    }
+  }, [searchParams]);
 
   async function handleLogin(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -30,22 +39,40 @@ export default function LoginPage() {
       return;
     }
 
-    // Check if account is active
+    // Check if account status is true (active)
     if (authData?.user) {
       try {
         const { data: profile } = await supabase
           .from("customer_profiles")
-          .select("is_active, role")
+          .select("*")
           .eq("user_id", authData.user.id)
           .maybeSingle();
 
-        if (profile && profile.is_active === false) {
-          await supabase.auth.signOut();
-          setLoading(false);
-          setErrorMessage(
-            "Your account has been deactivated. Please contact your administrator."
-          );
-          return;
+        if (profile) {
+          const isAdmin =
+            profile.role === "admin" ||
+            authData.user.email?.toLowerCase().trim() === "unethmi0@gmail.com" ||
+            Boolean(authData.user.email?.toLowerCase().includes("admin"));
+
+          if (!isAdmin) {
+            // Check status / is_active: must be true
+            const isInactive =
+              profile.status === false ||
+              profile.status === "false" ||
+              profile.status === "inactive" ||
+              profile.status === "disabled" ||
+              profile.is_active === false ||
+              profile.is_active === "false";
+
+            if (isInactive) {
+              await supabase.auth.signOut();
+              setLoading(false);
+              setErrorMessage(
+                "Your account is inactive. Please contact your administrator to activate your account."
+              );
+              return;
+            }
+          }
         }
       } catch (err) {
         console.warn("Could not verify customer active status:", err);
@@ -124,5 +151,19 @@ export default function LoginPage() {
         </p>
       </form>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-[#f8f4ed]">
+          <p className="text-sm text-gray-600">Loading login...</p>
+        </main>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

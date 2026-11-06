@@ -8,6 +8,7 @@ export type CustomerProfile = {
   full_name: string | null;
   role: UserRole;
   is_active?: boolean;
+  status?: boolean | string | null;
   email?: string | null;
   created_at?: string;
 };
@@ -182,6 +183,7 @@ export async function updateCustomerProfile(
     username?: string | null;
     role?: UserRole;
     is_active?: boolean;
+    status?: boolean | string | null;
     email?: string | null;
   }
 ): Promise<{ data: CustomerProfile | null; error: Error | null }> {
@@ -192,19 +194,25 @@ export async function updateCustomerProfile(
     if (updates.full_name !== undefined) payload.full_name = updates.full_name?.trim() || null;
     if (updates.username !== undefined) payload.username = updates.username?.trim() || null;
     if (updates.role !== undefined) payload.role = updates.role;
-    if (updates.is_active !== undefined) payload.is_active = updates.is_active;
+    if (updates.is_active !== undefined) {
+      payload.is_active = updates.is_active;
+      payload.status = updates.is_active;
+    } else if (updates.status !== undefined) {
+      payload.status = updates.status;
+      payload.is_active = updates.status === true;
+    }
     if (updates.email !== undefined) payload.email = updates.email?.trim() || null;
 
     // Try updating with all fields
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("customer_profiles")
       .update(payload)
       .eq("user_id", userId)
-      .select("user_id, username, full_name, role, is_active, email, created_at")
+      .select("*")
       .maybeSingle();
 
-    // If error occurs because is_active or email columns don't exist yet, retry without them
-    if (error && (error.message.includes("is_active") || error.message.includes("email") || error.code === "42703")) {
+    // If error occurs because is_active, status or email columns don't exist yet, retry gracefully
+    if (error && (error.message.includes("is_active") || error.message.includes("status") || error.message.includes("email") || error.code === "42703")) {
       const basicPayload: Record<string, unknown> = {
         user_id: userId,
       };
@@ -216,7 +224,7 @@ export async function updateCustomerProfile(
         .from("customer_profiles")
         .update(basicPayload)
         .eq("user_id", userId)
-        .select("user_id, username, full_name, role, created_at")
+        .select("*")
         .maybeSingle();
 
       if (retryRes.error) {
@@ -226,6 +234,7 @@ export async function updateCustomerProfile(
         data: {
           ...(retryRes.data as CustomerProfile),
           is_active: updates.is_active !== undefined ? updates.is_active : true,
+          status: updates.is_active !== undefined ? updates.is_active : true,
         },
         error: null,
       };

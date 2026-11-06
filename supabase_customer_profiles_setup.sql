@@ -13,6 +13,7 @@ create table if not exists public.customer_profiles (
   created_at timestamp with time zone null default now(),
   role text not null default 'customer'::text,
   is_active boolean not null default true,
+  status boolean not null default true,
   email character varying(255) null,
   constraint customer_profiles_pkey primary key (user_id),
   constraint customer_profiles_username_key unique (username),
@@ -22,6 +23,7 @@ create table if not exists public.customer_profiles (
 
 -- Ensure columns exist if table was already created
 alter table public.customer_profiles add column if not exists is_active boolean not null default true;
+alter table public.customer_profiles add column if not exists status boolean not null default true;
 alter table public.customer_profiles add column if not exists email character varying(255) null;
 
 alter table public.customer_profiles enable row level security;

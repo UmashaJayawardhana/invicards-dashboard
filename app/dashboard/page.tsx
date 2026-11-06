@@ -249,6 +249,35 @@ export default function DashboardPage() {
         const userEmail = user.email ?? "";
         const id = user.id;
 
+        // Check customer account status (must be active / true)
+        if (detectedRole === "customer") {
+          try {
+            const { data: profile } = await supabase
+              .from("customer_profiles")
+              .select("*")
+              .eq("user_id", id)
+              .maybeSingle();
+
+            if (profile) {
+              const isInactive =
+                profile.status === false ||
+                profile.status === "false" ||
+                profile.status === "inactive" ||
+                profile.status === "disabled" ||
+                profile.is_active === false ||
+                profile.is_active === "false";
+
+              if (isInactive) {
+                await supabase.auth.signOut();
+                if (active) router.replace("/login?error=inactive");
+                return;
+              }
+            }
+          } catch (statusErr) {
+            console.warn("Could not verify customer active status on dashboard:", statusErr);
+          }
+        }
+
         setEmail(userEmail);
         setCurrentUserId(id);
         setRole(detectedRole);

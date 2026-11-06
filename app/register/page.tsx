@@ -62,16 +62,15 @@ export default function RegisterPage() {
   const loadCustomers = useCallback(async () => {
     setCustomersLoading(true);
     try {
-      let profiles: any[] = [];
-
       // Query profiles from customer_profiles
+      let profiles: any[] = [];
       const { data: profData, error: profError } = await supabase
         .from("customer_profiles")
-        .select("user_id, username, full_name, role, created_at, is_active, email")
+        .select("*")
         .order("created_at", { ascending: false });
 
       if (profError) {
-        // Fallback if is_active or email columns haven't been added to postgres yet
+        console.warn("Could not query all columns on customer_profiles:", profError.message);
         const { data: fallbackData, error: fallbackError } = await supabase
           .from("customer_profiles")
           .select("user_id, username, full_name, role, created_at")
@@ -111,12 +110,20 @@ export default function RegisterPage() {
           resolvedEmail = userEvents[0].email;
         }
 
+        // Check both status and is_active columns
+        const isUserActive =
+          p.status !== undefined && p.status !== null
+            ? p.status === true || String(p.status).toLowerCase() === "true" || String(p.status).toLowerCase() === "active"
+            : p.is_active !== undefined && p.is_active !== null
+            ? p.is_active === true || String(p.is_active).toLowerCase() === "true"
+            : true;
+
         return {
           user_id: p.user_id,
           username: p.username || null,
           full_name: p.full_name || null,
           role: (p.role === "admin" ? "admin" : "customer") as UserRole,
-          is_active: p.is_active !== false,
+          is_active: isUserActive,
           email: resolvedEmail || null,
           created_at: p.created_at || null,
           assignedEvents: userEvents.map((ev) => ({
@@ -250,10 +257,31 @@ export default function RegisterPage() {
     );
 
     try {
-      const { error } = await supabase
+      // Try updating both status and is_active
+      let { error } = await supabase
         .from("customer_profiles")
-        .update({ is_active: newStatus })
+        .update({ is_active: newStatus, status: newStatus })
         .eq("user_id", customer.user_id);
+
+      if (error) {
+        // Fallback retry with is_active only
+        const r1 = await supabase
+          .from("customer_profiles")
+          .update({ is_active: newStatus })
+          .eq("user_id", customer.user_id);
+
+        if (r1.error) {
+          // Fallback retry with status only
+          const r2 = await supabase
+            .from("customer_profiles")
+            .update({ status: newStatus })
+            .eq("user_id", customer.user_id);
+
+          error = r2.error || null;
+        } else {
+          error = null;
+        }
+      }
 
       if (error) {
         // Revert on failure
@@ -263,7 +291,7 @@ export default function RegisterPage() {
           )
         );
         setTableMessage(
-          `Could not update active status: ${error.message}. Please run the SQL migration to add 'is_active'.`
+          `Could not update status: ${error.message}. Please verify Supabase permissions.`
         );
       } else {
         setTableMessage(
