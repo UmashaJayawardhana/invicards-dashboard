@@ -19,18 +19,40 @@ export default function LoginPage() {
     setLoading(true);
     setErrorMessage("");
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data: authData, error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     });
 
-    setLoading(false);
-
     if (error) {
+      setLoading(false);
       setErrorMessage(error.message);
       return;
     }
 
+    // Check if account is active
+    if (authData?.user) {
+      try {
+        const { data: profile } = await supabase
+          .from("customer_profiles")
+          .select("is_active, role")
+          .eq("user_id", authData.user.id)
+          .maybeSingle();
+
+        if (profile && profile.is_active === false) {
+          await supabase.auth.signOut();
+          setLoading(false);
+          setErrorMessage(
+            "Your account has been deactivated. Please contact your administrator."
+          );
+          return;
+        }
+      } catch (err) {
+        console.warn("Could not verify customer active status:", err);
+      }
+    }
+
+    setLoading(false);
     router.push("/dashboard");
     router.refresh();
   }

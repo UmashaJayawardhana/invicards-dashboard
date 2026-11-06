@@ -7,6 +7,8 @@ export type CustomerProfile = {
   username: string | null;
   full_name: string | null;
   role: UserRole;
+  is_active?: boolean;
+  email?: string | null;
   created_at?: string;
 };
 
@@ -165,6 +167,79 @@ export async function updateUserRole(
   } catch (err) {
     return {
       error: err instanceof Error ? err : new Error("Failed to update role"),
+    };
+  }
+}
+
+/**
+ * Update full customer profile in public.customer_profiles.
+ */
+export async function updateCustomerProfile(
+  supabase: SupabaseClient,
+  userId: string,
+  updates: {
+    full_name?: string | null;
+    username?: string | null;
+    role?: UserRole;
+    is_active?: boolean;
+    email?: string | null;
+  }
+): Promise<{ data: CustomerProfile | null; error: Error | null }> {
+  try {
+    const payload: Record<string, unknown> = {
+      user_id: userId,
+    };
+    if (updates.full_name !== undefined) payload.full_name = updates.full_name?.trim() || null;
+    if (updates.username !== undefined) payload.username = updates.username?.trim() || null;
+    if (updates.role !== undefined) payload.role = updates.role;
+    if (updates.is_active !== undefined) payload.is_active = updates.is_active;
+    if (updates.email !== undefined) payload.email = updates.email?.trim() || null;
+
+    // Try updating with all fields
+    const { data, error } = await supabase
+      .from("customer_profiles")
+      .update(payload)
+      .eq("user_id", userId)
+      .select("user_id, username, full_name, role, is_active, email, created_at")
+      .maybeSingle();
+
+    // If error occurs because is_active or email columns don't exist yet, retry without them
+    if (error && (error.message.includes("is_active") || error.message.includes("email") || error.code === "42703")) {
+      const basicPayload: Record<string, unknown> = {
+        user_id: userId,
+      };
+      if (updates.full_name !== undefined) basicPayload.full_name = updates.full_name?.trim() || null;
+      if (updates.username !== undefined) basicPayload.username = updates.username?.trim() || null;
+      if (updates.role !== undefined) basicPayload.role = updates.role;
+
+      const retryRes = await supabase
+        .from("customer_profiles")
+        .update(basicPayload)
+        .eq("user_id", userId)
+        .select("user_id, username, full_name, role, created_at")
+        .maybeSingle();
+
+      if (retryRes.error) {
+        return { data: null, error: new Error(retryRes.error.message) };
+      }
+      return {
+        data: {
+          ...(retryRes.data as CustomerProfile),
+          is_active: updates.is_active !== undefined ? updates.is_active : true,
+        },
+        error: null,
+      };
+    }
+
+    if (error) {
+      return { data: null, error: new Error(error.message) };
+    }
+
+    return { data: data as CustomerProfile, error: null };
+  } catch (err) {
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error("Failed to update profile"),
     };
   }
 }
