@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { getUserRole } from "@/lib/auth";
+import { getUserRole, fetchUserRole } from "@/lib/auth";
 
 export default function CreateEventPage() {
   const router = useRouter();
@@ -35,7 +35,7 @@ export default function CreateEventPage() {
           return;
         }
 
-        const role = getUserRole(user);
+        const role = await fetchUserRole(supabase, user);
         if (role !== "admin") {
           // Customers cannot create events
           router.replace("/dashboard");

@@ -32,9 +32,15 @@ export function getUserRole(user: User | null): UserRole {
     if (normalized === "customer") return "customer";
   }
 
-  // 3. Fallback convention: if email contains 'admin'
-  if (user.email && user.email.toLowerCase().includes("admin")) {
-    return "admin";
+  // 3. Fallback convention: if email contains 'admin' or matches platform admin
+  if (user.email) {
+    const normalizedEmail = user.email.toLowerCase().trim();
+    if (
+      normalizedEmail.includes("admin") ||
+      normalizedEmail === "unethmi0@gmail.com"
+    ) {
+      return "admin";
+    }
   }
 
   // 4. Default role

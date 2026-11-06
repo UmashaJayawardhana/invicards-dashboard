@@ -166,13 +166,20 @@ create trigger on_auth_user_created
   for each row execute procedure public.handle_new_user();
 
 -- ------------------------------------------------------------------------------
--- 5. Sync existing users into customer_profiles
+-- 5. Sync existing users into customer_profiles and set Admin role
 -- ------------------------------------------------------------------------------
 insert into public.customer_profiles (user_id, username, full_name, role)
 select 
   id, 
   coalesce(raw_user_meta_data->>'username', split_part(email, '@', 1)),
   coalesce(raw_user_meta_data->>'full_name', ''),
-  coalesce(raw_user_meta_data->>'role', 'customer')
+  case 
+    when email = 'unethmi0@gmail.com' or email like '%admin%' then 'admin'
+    else coalesce(raw_user_meta_data->>'role', 'customer')
+  end
 from auth.users
-on conflict (user_id) do nothing;
+on conflict (user_id) do update set
+  role = case 
+    when auth.users.email = 'unethmi0@gmail.com' or auth.users.email like '%admin%' then 'admin'
+    else public.customer_profiles.role
+  end;

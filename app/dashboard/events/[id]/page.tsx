@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import QRCode from "qrcode";
 import { createClient } from "@/lib/supabase/client";
-import { getUserRole, UserRole } from "@/lib/auth";
+import { getUserRole, fetchUserRole, UserRole } from "@/lib/auth";
 import { buildGuestInvitationUrl } from "@/lib/url";
 
 type EventDetails = {
@@ -80,7 +80,7 @@ function ManageEventContent() {
       }
 
       setEmail(user.email ?? "");
-      const role = getUserRole(user);
+      const role = await fetchUserRole(supabase, user);
       setUserRole(role);
 
       const { data: eventData, error: eventError } = await supabase

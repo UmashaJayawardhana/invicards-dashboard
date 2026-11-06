@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
 import { createClient } from "@/lib/supabase/client";
-import { getUserRole, UserRole } from "@/lib/auth";
+import { getUserRole, fetchUserRole, UserRole } from "@/lib/auth";
 import { buildGuestInvitationUrl } from "@/lib/url";
 
 type EventItem = {
@@ -75,13 +75,13 @@ function NewInvitationContent() {
         return;
       }
 
-      const role = getUserRole(user);
+      const role = await fetchUserRole(supabase, user);
       setUserRole(role);
 
       let query = supabase
         .from("events")
         .select("event_id, event_type, event_date, contact_person, email, owner_user_id")
-        .order("order_date", { ascending: false });
+        .order("event_id", { ascending: false });
 
       if (role === "customer") {
         query = query.or(

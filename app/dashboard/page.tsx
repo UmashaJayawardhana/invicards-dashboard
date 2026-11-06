@@ -87,9 +87,10 @@ export default function DashboardPage() {
             .select(
               "event_id, event_type, contact_person, email, mobile, event_date, event_time, event_venue, order_date, owner_user_id"
             )
-            .order("order_date", { ascending: false });
+            .order("event_id", { ascending: false });
 
           if (eventError) {
+            console.error("Admin events load error:", eventError);
             throw new Error(`Could not load events: ${eventError.message}`);
           }
 
@@ -98,20 +99,24 @@ export default function DashboardPage() {
             created_at: event.order_date,
           })) as DashboardEvent[];
 
-          // Load recent invitations across all events
-          const { data: invData, error: invError } = await supabase
-            .from("wedding_invitations")
-            .select(
-              "wedding_invitation_id, event_id, guest_name, invitation_type, rsvp_status, wish_message, created_at, number_of_guests, attending_count, guest_token"
-            )
-            .order("created_at", { ascending: false })
-            .limit(150);
+          // Load recent invitations across all events (non-fatal if invitations fails)
+          try {
+            const { data: invData, error: invError } = await supabase
+              .from("wedding_invitations")
+              .select(
+                "wedding_invitation_id, event_id, guest_name, invitation_type, rsvp_status, wish_message, created_at, number_of_guests, attending_count, guest_token"
+              )
+              .order("created_at", { ascending: false })
+              .limit(150);
 
-          if (invError) {
-            throw new Error(`Could not load invitations: ${invError.message}`);
+            if (invError) {
+              console.warn("Could not load invitations:", invError.message);
+            } else if (invData) {
+              invitationsList = invData as DashboardInvitation[];
+            }
+          } catch (invErr) {
+            console.warn("Failed fetching invitations for admin:", invErr);
           }
-
-          invitationsList = (invData ?? []) as DashboardInvitation[];
         } else {
           // CUSTOMER: load events from public.events owned by this customer
           let ownedEvents: any[] = [];
@@ -122,7 +127,7 @@ export default function DashboardPage() {
                 "event_id, event_type, contact_person, email, mobile, event_date, event_time, event_venue, order_date, owner_user_id"
               )
               .eq("owner_user_id", uid)
-              .order("order_date", { ascending: false });
+              .order("event_id", { ascending: false });
 
             if (ownerError) {
               console.error("Error loading owned events:", ownerError);
@@ -416,14 +421,26 @@ export default function DashboardPage() {
   const declined = invitations.filter((inv) => inv.rsvp_status === "declined").length;
   const pending = invitations.filter((inv) => inv.rsvp_status === "pending").length;
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefreshEvents = async () => {
+    setRefreshing(true);
+    try {
+      await loadDashboardData(role, currentUserId, email);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const filteredEvents = events.filter((ev) => {
     if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
+    const q = searchQuery.toLowerCase().trim();
     return (
       ev.event_id.toString().includes(q) ||
       ev.event_type.toLowerCase().includes(q) ||
       ev.contact_person.toLowerCase().includes(q) ||
       (ev.email && ev.email.toLowerCase().includes(q)) ||
+      (ev.mobile && ev.mobile.toLowerCase().includes(q)) ||
       (ev.event_venue && ev.event_venue.toLowerCase().includes(q))
     );
   });
@@ -602,17 +619,26 @@ export default function DashboardPage() {
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={handleRefreshEvents}
+                    disabled={refreshing}
+                    title="Refresh all events from database"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
+                  >
+                    <span className={refreshing ? "animate-spin" : ""}>↻</span>
+                    {refreshing ? "Refreshing..." : "Refresh"}
+                  </button>
                   <input
                     type="text"
-                    placeholder="Search by ID, name, email..."
+                    placeholder="Search by ID, name, email, mobile..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-64 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-black placeholder:text-gray-400 focus:border-amber-700 focus:outline-none"
                   />
                   <Link
                     href="/dashboard/events/new"
-                    className="rounded-lg bg-[#8c6b45] px-3.5 py-2 text-sm font-medium text-white hover:bg-[#745637]"
+                    className="rounded-lg bg-[#8c6b45] px-3.5 py-2 text-sm font-medium text-white hover:bg-[#745637] transition"
                   >
                     + New Event
                   </Link>
@@ -625,39 +651,69 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div className="mt-4 overflow-x-auto">
-                  <table className="w-full min-w-[750px] text-left text-sm text-black">
+                  <table className="w-full min-w-[900px] text-left text-sm text-black">
                     <thead>
-                      <tr className="border-b border-[#e8ddcc] text-gray-700">
-                        <th className="py-3 pr-4 font-semibold">Event ID</th>
-                        <th className="py-3 pr-4 font-semibold">Type</th>
-                        <th className="py-3 pr-4 font-semibold">Contact Person / Customer</th>
-                        <th className="py-3 pr-4 font-semibold">Date & Venue</th>
-                        <th className="py-3 font-semibold text-right">Actions</th>
+                      <tr className="border-b border-[#e8ddcc] text-gray-700 bg-[#faf6f1]/60">
+                        <th className="py-3 px-4 font-semibold">Event ID</th>
+                        <th className="py-3 px-4 font-semibold">Event Type</th>
+                        <th className="py-3 px-4 font-semibold">Contact / Customer</th>
+                        <th className="py-3 px-4 font-semibold">Date & Time</th>
+                        <th className="py-3 px-4 font-semibold">Venue</th>
+                        <th className="py-3 px-4 font-semibold">Order Date</th>
+                        <th className="py-3 px-4 font-semibold">Status</th>
+                        <th className="py-3 px-4 font-semibold text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredEvents.map((ev) => (
                         <tr
                           key={ev.event_id}
-                          className="border-b border-[#eee5d9] last:border-0 hover:bg-[#faf6f1]/50"
+                          className="border-b border-[#eee5d9] last:border-0 hover:bg-[#faf6f1]/50 transition"
                         >
-                          <td className="py-3 pr-4 font-bold text-amber-900">
+                          <td className="py-3 px-4 font-bold text-amber-900">
                             #{ev.event_id}
                           </td>
-                          <td className="py-3 pr-4 capitalize font-medium">
-                            {ev.event_type.replaceAll("_", " ")}
+                          <td className="py-3 px-4">
+                            <span className="inline-block rounded-md bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs font-medium text-amber-900 capitalize">
+                              {ev.event_type.replaceAll("_", " ")}
+                            </span>
                           </td>
-                          <td className="py-3 pr-4">
+                          <td className="py-3 px-4">
                             <p className="font-semibold text-black">{ev.contact_person}</p>
                             {ev.email && (
-                              <p className="text-xs text-gray-500">{ev.email}</p>
+                              <p className="text-xs text-gray-600">{ev.email}</p>
+                            )}
+                            {ev.mobile && (
+                              <p className="text-xs text-gray-500">Tel: {ev.mobile}</p>
                             )}
                           </td>
-                          <td className="py-3 pr-4">
-                            <p>{ev.event_date}</p>
-                            <p className="text-xs text-gray-500">{ev.event_venue || "No venue set"}</p>
+                          <td className="py-3 px-4">
+                            <p className="font-medium text-black">{ev.event_date}</p>
+                            {ev.event_time && (
+                              <p className="text-xs text-gray-500">{ev.event_time}</p>
+                            )}
                           </td>
-                          <td className="py-3 text-right">
+                          <td className="py-3 px-4">
+                            <p className="text-sm text-gray-800">{ev.event_venue || "No venue set"}</p>
+                          </td>
+                          <td className="py-3 px-4 text-xs text-gray-600">
+                            {ev.created_at ? new Date(ev.created_at).toLocaleDateString() : "—"}
+                          </td>
+                          <td className="py-3 px-4">
+                            {ev.owner_user_id ? (
+                              <span
+                                title={`Owner UUID: ${ev.owner_user_id}`}
+                                className="inline-block rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] font-medium text-emerald-800"
+                              >
+                                Assigned
+                              </span>
+                            ) : (
+                              <span className="inline-block rounded-full bg-gray-100 border border-gray-300 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                                Unassigned
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end gap-2">
                               <Link
                                 href={`/dashboard/events/${ev.event_id}`}
