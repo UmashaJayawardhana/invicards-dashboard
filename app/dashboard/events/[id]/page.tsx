@@ -54,6 +54,28 @@ function ManageEventContent() {
   const [generatingQrId, setGeneratingQrId] = useState<number | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [modalCopied, setModalCopied] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+
+  // Edit Event Modal states
+  const [isEditingEvent, setIsEditingEvent] = useState(false);
+  const [editEventType, setEditEventType] = useState("");
+  const [editContactPerson, setEditContactPerson] = useState("");
+  const [editEventDate, setEditEventDate] = useState("");
+  const [editEventTime, setEditEventTime] = useState("");
+  const [editEventVenue, setEditEventVenue] = useState("");
+  const [editEventEmail, setEditEventEmail] = useState("");
+  const [editEventMobile, setEditEventMobile] = useState("");
+  const [isSavingEvent, setIsSavingEvent] = useState(false);
+  const [editEventError, setEditEventError] = useState("");
+
+  // Edit Guest Modal states
+  const [editingGuest, setEditingGuest] = useState<GuestInvitation | null>(null);
+  const [editGuestName, setEditGuestName] = useState("");
+  const [editInvitationType, setEditInvitationType] = useState<"Single" | "Couple" | "Family">("Single");
+  const [editNumberOfGuests, setEditNumberOfGuests] = useState<number>(1);
+  const [editRsvpStatus, setEditRsvpStatus] = useState<string>("pending");
+  const [isSavingGuest, setIsSavingGuest] = useState(false);
+  const [editGuestError, setEditGuestError] = useState("");
 
   const eventId = Number(params?.id);
 
@@ -222,6 +244,171 @@ function ManageEventContent() {
     link.click();
   };
 
+  // Open Edit Event Modal
+  const handleOpenEditEvent = () => {
+    if (!event) return;
+    setEditEventType(event.event_type);
+    setEditContactPerson(event.contact_person);
+    setEditEventDate(event.event_date);
+    setEditEventTime(event.event_time ? event.event_time.slice(0, 5) : "");
+    setEditEventVenue(event.event_venue || "");
+    setEditEventEmail(event.email || "");
+    setEditEventMobile(event.mobile || "");
+    setEditEventError("");
+    setIsEditingEvent(true);
+  };
+
+  // Save Event Details
+  const handleSaveEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!event) return;
+
+    if (!editContactPerson.trim()) {
+      setEditEventError("Please enter a contact person name.");
+      return;
+    }
+    if (!editEventDate) {
+      setEditEventError("Please select an event date.");
+      return;
+    }
+
+    setIsSavingEvent(true);
+    setEditEventError("");
+    const supabase = createClient();
+
+    try {
+      const { data: updated, error: updateErr } = await supabase
+        .from("events")
+        .update({
+          event_type: editEventType.trim(),
+          contact_person: editContactPerson.trim(),
+          event_date: editEventDate,
+          event_time: editEventTime.trim() ? editEventTime.trim() + (editEventTime.length === 5 ? ":00" : "") : null,
+          event_venue: editEventVenue.trim() || null,
+          email: editEventEmail.trim() || null,
+          mobile: editEventMobile.trim() || null,
+        })
+        .eq("event_id", event.event_id)
+        .select("event_id, event_type, contact_person, email, mobile, event_date, event_time, event_venue, order_date")
+        .single();
+
+      if (updateErr) throw updateErr;
+
+      setEvent(updated as EventDetails);
+      setIsEditingEvent(false);
+      setSuccessMessage("Event details updated successfully!");
+      setTimeout(() => setSuccessMessage(""), 4000);
+    } catch (err) {
+      setEditEventError(err instanceof Error ? err.message : "Failed to update event.");
+    } finally {
+      setIsSavingEvent(false);
+    }
+  };
+
+  // Open Edit Guest Modal
+  const handleOpenEditGuest = (guest: GuestInvitation) => {
+    setEditingGuest(guest);
+    setEditGuestName(guest.guest_name);
+    const typeClean =
+      guest.invitation_type === "Couple" || guest.invitation_type === "Family"
+        ? guest.invitation_type
+        : "Single";
+    setEditInvitationType(typeClean as "Single" | "Couple" | "Family");
+    setEditNumberOfGuests(guest.number_of_guests || 1);
+    setEditRsvpStatus(guest.rsvp_status || "pending");
+    setEditGuestError("");
+  };
+
+  // Change type handler inside Edit Guest Modal to adjust default count automatically
+  const handleEditInvitationTypeChange = (newType: "Single" | "Couple" | "Family") => {
+    setEditInvitationType(newType);
+    if (newType === "Single") {
+      setEditNumberOfGuests(1);
+    } else if (newType === "Couple") {
+      setEditNumberOfGuests(2);
+    } else if (newType === "Family" && editNumberOfGuests <= 2) {
+      setEditNumberOfGuests(4);
+    }
+  };
+
+  // Save Guest Changes
+  const handleSaveGuest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingGuest) return;
+
+    if (!editGuestName.trim()) {
+      setEditGuestError("Please enter the guest name.");
+      return;
+    }
+
+    const count = Number(editNumberOfGuests);
+    if (!Number.isInteger(count) || count < 1 || count > 50) {
+      setEditGuestError("Number of guests must be a whole number between 1 and 50.");
+      return;
+    }
+
+    setIsSavingGuest(true);
+    setEditGuestError("");
+    const supabase = createClient();
+
+    try {
+      const { data: updated, error: updateErr } = await supabase
+        .from("wedding_invitations")
+        .update({
+          guest_name: editGuestName.trim(),
+          invitation_type: editInvitationType,
+          number_of_guests: count,
+          rsvp_status: editRsvpStatus,
+        })
+        .eq("wedding_invitation_id", editingGuest.wedding_invitation_id)
+        .select(
+          "wedding_invitation_id, guest_name, invitation_type, number_of_guests, rsvp_status, attending_count, responded_at, wish_message, created_at"
+        )
+        .single();
+
+      if (updateErr) throw updateErr;
+
+      setGuests((prev) =>
+        prev.map((g) =>
+          g.wedding_invitation_id === editingGuest.wedding_invitation_id
+            ? (updated as GuestInvitation)
+            : g
+        )
+      );
+
+      setEditingGuest(null);
+      setSuccessMessage(`Invitation for "${editGuestName.trim()}" updated successfully!`);
+      setTimeout(() => setSuccessMessage(""), 4000);
+    } catch (err) {
+      setEditGuestError(err instanceof Error ? err.message : "Failed to update invitation.");
+    } finally {
+      setIsSavingGuest(false);
+    }
+  };
+
+  // Delete Guest Invitation
+  const handleDeleteGuest = async (guest: GuestInvitation) => {
+    if (!window.confirm(`Are you sure you want to delete the invitation for "${guest.guest_name}"?`)) {
+      return;
+    }
+
+    const supabase = createClient();
+    try {
+      const { error: delErr } = await supabase
+        .from("wedding_invitations")
+        .delete()
+        .eq("wedding_invitation_id", guest.wedding_invitation_id);
+
+      if (delErr) throw delErr;
+
+      setGuests((prev) => prev.filter((g) => g.wedding_invitation_id !== guest.wedding_invitation_id));
+      setSuccessMessage(`Invitation for "${guest.guest_name}" was deleted.`);
+      setTimeout(() => setSuccessMessage(""), 4000);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete guest invitation.");
+    }
+  };
+
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#f8f4ed]">
@@ -296,6 +483,15 @@ function ManageEventContent() {
       </header>
 
       <div className="mx-auto max-w-7xl space-y-6 px-5 py-8">
+        {successMessage && (
+          <div
+            role="status"
+            className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm font-medium text-emerald-900 shadow-xs"
+          >
+            {successMessage}
+          </div>
+        )}
+
         {error && (
           <div
             role="alert"
@@ -313,7 +509,7 @@ function ManageEventContent() {
         {event && (
           <>
             {/* Event Summary Card */}
-            <section className="rounded-2xl border border-[#e8ddcc] bg-white p-6">
+            <section className="rounded-2xl border border-[#e8ddcc] bg-white p-6 shadow-xs">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-sm font-medium text-amber-800">
@@ -332,13 +528,19 @@ function ManageEventContent() {
                 <div className="flex flex-wrap items-center gap-3">
                   <button
                     onClick={() => void loadEvent()}
-                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-black hover:bg-gray-50"
+                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-black hover:bg-gray-50 transition"
                   >
                     Refresh
                   </button>
+                  <button
+                    onClick={handleOpenEditEvent}
+                    className="rounded-lg border border-[#8c6b45] bg-[#faf6f1] px-4 py-2 text-sm font-semibold text-[#8c6b45] hover:bg-[#8c6b45] hover:text-white transition shadow-xs"
+                  >
+                    ✎ Edit Event Details
+                  </button>
                   <Link
                     href={`/dashboard/invitations/new?eventId=${event.event_id}`}
-                    className="rounded-lg bg-[#8c6b45] px-4 py-2 text-sm font-medium text-white hover:bg-[#745637]"
+                    className="rounded-lg bg-[#8c6b45] px-4 py-2 text-sm font-medium text-white hover:bg-[#745637] transition shadow-xs"
                   >
                     + Create Invitations
                   </Link>
@@ -458,7 +660,8 @@ function ManageEventContent() {
                         <th className="py-3 pr-4 font-semibold text-black">RSVP</th>
                         <th className="py-3 pr-4 font-semibold text-black">Attending</th>
                         <th className="py-3 pr-4 font-semibold text-black">Wish</th>
-                        <th className="py-3 font-semibold text-black">QR / Invitation Link</th>
+                        <th className="py-3 pr-4 font-semibold text-black">QR / Invitation Link</th>
+                        <th className="py-3 font-semibold text-black text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="text-black">
@@ -604,6 +807,38 @@ function ManageEventContent() {
                                 </a>
                               </div>
                             </td>
+                            <td className="py-3 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditGuest(guest)}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-[#8c6b45] bg-[#faf6f1] px-2.5 py-1.5 text-xs font-semibold text-[#8c6b45] hover:bg-[#8c6b45] hover:text-white transition shadow-2xs"
+                                  title="Edit guest name, invitation type, and number of guests"
+                                >
+                                  ✎ Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleDeleteGuest(guest)}
+                                  className="inline-flex items-center rounded-lg border border-red-200 bg-white p-1.5 text-xs text-red-600 hover:bg-red-50 transition"
+                                  title="Delete invitation"
+                                >
+                                  <svg
+                                    className="h-3.5 w-3.5"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    strokeWidth={2}
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                    />
+                                  </svg>
+                                </button>
+                              </div>
+                            </td>
                           </tr>
                         );
                       })}
@@ -700,6 +935,277 @@ function ManageEventContent() {
                 Open Invitation in New Tab →
               </a>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ----------------- EDIT EVENT MODAL ----------------- */}
+      {isEditingEvent && event && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
+        >
+          <div className="w-full max-w-lg rounded-3xl border border-[#e8ddcc] bg-white p-6 shadow-2xl sm:p-8 animate-in fade-in duration-200">
+            <div className="flex items-start justify-between border-b border-[#eee5d9] pb-4">
+              <div>
+                <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900 border border-amber-300">
+                  Event #{event.event_id}
+                </span>
+                <h3 className="mt-1 text-xl font-bold text-black">
+                  Edit Event Details
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditingEvent(false)}
+                className="rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-black transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEvent} className="mt-5 space-y-4">
+              {editEventError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                  {editEventError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-black">
+                    Event Type
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editEventType}
+                    onChange={(e) => setEditEventType(e.target.value)}
+                    placeholder="e.g. Wedding, Engagement"
+                    className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-black outline-none focus:border-[#8c6b45]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-black">
+                    Contact Person
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editContactPerson}
+                    onChange={(e) => setEditContactPerson(e.target.value)}
+                    placeholder="e.g. Chanith Sitharu"
+                    className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-black outline-none focus:border-[#8c6b45]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-black">
+                    Event Date
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={editEventDate}
+                    onChange={(e) => setEditEventDate(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-black outline-none focus:border-[#8c6b45]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-black">
+                    Event Time
+                  </label>
+                  <input
+                    type="time"
+                    value={editEventTime}
+                    onChange={(e) => setEditEventTime(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-black outline-none focus:border-[#8c6b45]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-black">
+                  Event Venue / Location
+                </label>
+                <input
+                  type="text"
+                  value={editEventVenue}
+                  onChange={(e) => setEditEventVenue(e.target.value)}
+                  placeholder="e.g. Kandy, Shangri-La Colombo"
+                  className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-black outline-none focus:border-[#8c6b45]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-black">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={editEventEmail}
+                    onChange={(e) => setEditEventEmail(e.target.value)}
+                    placeholder="contact@example.com"
+                    className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-black outline-none focus:border-[#8c6b45]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-black">
+                    Mobile Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={editEventMobile}
+                    onChange={(e) => setEditEventMobile(e.target.value)}
+                    placeholder="0716266175"
+                    className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-black outline-none focus:border-[#8c6b45]"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex items-center justify-end gap-3 border-t border-[#eee5d9] pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingEvent(false)}
+                  className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEvent}
+                  className="rounded-xl bg-[#8c6b45] px-5 py-2 text-sm font-semibold text-white hover:bg-[#745637] transition disabled:opacity-60 shadow-xs"
+                >
+                  {isSavingEvent ? "Saving Event..." : "Save Event Details"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ----------------- EDIT GUEST INVITATION MODAL ----------------- */}
+      {editingGuest && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
+        >
+          <div className="w-full max-w-md rounded-3xl border border-[#e8ddcc] bg-white p-6 shadow-2xl sm:p-8 animate-in fade-in duration-200">
+            <div className="flex items-start justify-between border-b border-[#eee5d9] pb-4">
+              <div>
+                <span className="rounded-full bg-[#f4ebe1] px-3 py-1 text-xs font-semibold uppercase tracking-wider text-[#8c6b45]">
+                  Invitation #{editingGuest.wedding_invitation_id}
+                </span>
+                <h3 className="mt-1 text-xl font-bold text-black">
+                  Edit Guest Invitation
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingGuest(null)}
+                className="rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-black transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveGuest} className="mt-5 space-y-4">
+              {editGuestError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                  {editGuestError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-black">
+                  Guest Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editGuestName}
+                  onChange={(e) => setEditGuestName(e.target.value)}
+                  placeholder="e.g. Kasun Silva"
+                  className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-black outline-none focus:border-[#8c6b45]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-black">
+                    Invitation Type
+                  </label>
+                  <select
+                    value={editInvitationType}
+                    onChange={(e) =>
+                      handleEditInvitationTypeChange(
+                        e.target.value as "Single" | "Couple" | "Family"
+                      )
+                    }
+                    className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-black outline-none focus:border-[#8c6b45]"
+                  >
+                    <option value="Single">Single (1 guest)</option>
+                    <option value="Couple">Couple (2 guests)</option>
+                    <option value="Family">Family</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-black">
+                    Number of Guests
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    required
+                    value={editNumberOfGuests}
+                    onChange={(e) => setEditNumberOfGuests(Number(e.target.value))}
+                    className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-black outline-none focus:border-[#8c6b45]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-black">
+                  RSVP Status
+                </label>
+                <select
+                  value={editRsvpStatus}
+                  onChange={(e) => setEditRsvpStatus(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-black outline-none focus:border-[#8c6b45]"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="accepted">Accepted (Attending)</option>
+                  <option value="declined">Declined</option>
+                </select>
+              </div>
+
+              <div className="mt-6 flex items-center justify-end gap-3 border-t border-[#eee5d9] pt-4">
+                <button
+                  type="button"
+                  onClick={() => setEditingGuest(null)}
+                  className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingGuest}
+                  className="rounded-xl bg-[#8c6b45] px-5 py-2 text-sm font-semibold text-white hover:bg-[#745637] transition disabled:opacity-60 shadow-xs"
+                >
+                  {isSavingGuest ? "Saving..." : "Save Guest Changes"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
