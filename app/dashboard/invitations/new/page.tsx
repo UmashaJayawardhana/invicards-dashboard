@@ -427,9 +427,26 @@ function NewInvitationContent() {
                   </select>
 
                   {selectedEvent && (
-                    <p className="mt-2 text-xs text-gray-500">
-                      Event date: {selectedEvent.event_date}
-                    </p>
+                    <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                      <span>Event Date: <strong className="text-black">{selectedEvent.event_date}</strong></span>
+                      <span>•</span>
+                      <span>
+                        Target Template:{" "}
+                        <strong className="text-[#8c6b45]">
+                          {selectedEvent.event_id === 1
+                            ? "Wedding 1 (Wedding1/invite/...)"
+                            : selectedEvent.event_id === 2
+                            ? "Gender Reveal (GnederReveal/...)"
+                            : selectedEvent.event_id === 3
+                            ? "Thanking Card (ThankingCard/Sample1/...)"
+                            : selectedEvent.event_id === 5
+                            ? "Wedding 2 (wedding2/...)"
+                            : selectedEvent.event_id === 7
+                            ? "Wedding 3 (wedding3/...)"
+                            : "Wedding 3 (wedding3/...)"}
+                        </strong>
+                      </span>
+                    </div>
                   )}
                 </div>
 
