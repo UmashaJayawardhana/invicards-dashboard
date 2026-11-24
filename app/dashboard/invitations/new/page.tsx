@@ -218,7 +218,24 @@ function NewInvitationContent() {
 
       const guestToken = crypto.randomUUID();
 
-      // Save the invitation in Supabase.
+      // Construct dynamic public invitation URL immediately
+      const url = buildGuestInvitationUrl(
+        selectedEvent.event_id,
+        invitationType,
+        name
+      );
+
+      // Generate QR code from the public URL.
+      const qrDataUrl = await QRCode.toDataURL(url, {
+        width: 400,
+        margin: 2,
+        errorCorrectionLevel: "H",
+      });
+
+      setGeneratedUrl(url);
+      setQrCode(qrDataUrl);
+
+      // Save the invitation record in Supabase.
       const { data: insertedGuest, error: insertError } =
         await supabase
           .from("wedding_invitations")
@@ -235,33 +252,17 @@ function NewInvitationContent() {
           .single();
 
       if (insertError) {
-        throw insertError;
+        console.warn("Supabase guest insert error:", insertError);
+        setError(
+          `URL & QR generated! Note: Database record could not be saved (${insertError.message}). Run the SQL fix in Supabase to enable row-level permissions.`
+        );
+        setSuccess("Invitation link and QR code generated successfully!");
+      } else if (insertedGuest) {
+        const savedGuest = insertedGuest as GuestInvitation;
+        setGuests((previous) => [savedGuest, ...previous]);
+        setSuccess("Invitation record saved and QR code generated.");
+        setError("");
       }
-
-      const savedGuest =
-        insertedGuest as GuestInvitation;
-
-      // Construct dynamic public invitation URL
-      const url = buildGuestInvitationUrl(
-        selectedEvent.event_id,
-        invitationType,
-        name
-      );
-
-      // Generate QR code from the public URL.
-      const qrDataUrl = await QRCode.toDataURL(url, {
-        width: 400,
-        margin: 2,
-        errorCorrectionLevel: "H",
-      });
-
-      setGeneratedUrl(url);
-      setQrCode(qrDataUrl);
-      setGuests((previous) => [savedGuest, ...previous]);
-
-      setSuccess(
-        "Invitation record saved and QR code generated."
-      );
 
       setGuestName("");
     } catch (err) {

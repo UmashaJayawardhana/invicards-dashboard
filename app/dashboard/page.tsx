@@ -377,6 +377,10 @@ export default function DashboardPage() {
         }
       }
 
+      const generatedUrl = buildGuestInvitationUrl(targetEventId, quickGuestType, name);
+      setQuickSuccessUrl(generatedUrl);
+      setQuickGuestName("");
+
       const { data: newGuest, error: insertError } = await supabase
         .from("wedding_invitations")
         .insert({
@@ -391,15 +395,16 @@ export default function DashboardPage() {
         )
         .single();
 
-      if (insertError) throw insertError;
-
-      const generatedUrl = buildGuestInvitationUrl(targetEventId, quickGuestType, name);
-      setQuickSuccessUrl(generatedUrl);
-      setQuickMessage(`Invitation URL generated for ${name}!`);
-      setQuickGuestName("");
-
-      if (newGuest) {
-        setInvitations((prev) => [newGuest as DashboardInvitation, ...prev]);
+      if (insertError) {
+        console.warn("Supabase quick guest insert error:", insertError);
+        setQuickMessage(
+          `URL generated for ${name}! (Notice: Database record blocked by RLS policy - run the SQL fix in Supabase to save table rows)`
+        );
+      } else {
+        setQuickMessage(`Invitation URL generated for ${name}!`);
+        if (newGuest) {
+          setInvitations((prev) => [newGuest as DashboardInvitation, ...prev]);
+        }
       }
     } catch (err) {
       const errorMsg =
