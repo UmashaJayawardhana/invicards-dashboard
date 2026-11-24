@@ -45,9 +45,12 @@ export function buildGuestInvitationUrl(
       return `https://wedding-invitation-sample-beta.vercel.app/wedding2/${id}/${encTypeLower}/${encName}`;
 
     case 7:
-    case 8:
-      // Event 7 & 8: wedding3/[eventId]/[invitationtype]/[guestname]
+      // Event 7: wedding3/[eventId]/[invitationtype]/[guestname]
       return `https://wedding-invitation-sample-beta.vercel.app/wedding3/${id}/${encTypeLower}/${encName}`;
+
+    case 8:
+      // Event 8: wedding4/[eventId]/[invitationtype]/[guestname]
+      return `https://wedding-invitation-sample-beta.vercel.app/wedding4/${id}/${encTypeLower}/${encName}`;
 
     default:
       // Fallback for other events: defaults to wedding3 template

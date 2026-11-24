@@ -436,14 +436,16 @@ function NewInvitationContent() {
                           {selectedEvent.event_id === 1
                             ? "Wedding 1 (Wedding1/invite/...)"
                             : selectedEvent.event_id === 2
-                            ? "Gender Reveal (GnederReveal/...)"
-                            : selectedEvent.event_id === 3
-                            ? "Thanking Card (ThankingCard/Sample1/...)"
-                            : selectedEvent.event_id === 5
-                            ? "Wedding 2 (wedding2/...)"
-                            : selectedEvent.event_id === 7 || selectedEvent.event_id === 8
-                            ? "Wedding 3 (wedding3/...)"
-                            : "Wedding 3 (wedding3/...)"}
+                              ? "Gender Reveal (GnederReveal/...)"
+                              : selectedEvent.event_id === 3
+                                ? "Thanking Card (ThankingCard/Sample1/...)"
+                                : selectedEvent.event_id === 5
+                                  ? "Wedding 2 (wedding2/...)"
+                                  : selectedEvent.event_id === 7
+                                    ? "Wedding 3 (wedding3/...)"
+                                    : selectedEvent.event_id === 8
+                                      ? "Wedding 4 (wedding4/...)"
+                                      : "Wedding 4 (wedding4/...)"}
                         </strong>
                       </span>
                     </div>
@@ -482,8 +484,8 @@ function NewInvitationContent() {
                     {invitationType === "Couple"
                       ? "Couple invitation automatically admits 2 guests."
                       : invitationType === "Family"
-                      ? "Specify the number of family members below."
-                      : "Single invitation admits 1 guest."}
+                        ? "Specify the number of family members below."
+                        : "Single invitation admits 1 guest."}
                   </p>
                 </div>
 
