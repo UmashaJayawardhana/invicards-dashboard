@@ -45,7 +45,8 @@ export function buildGuestInvitationUrl(
       return `https://wedding-invitation-sample-beta.vercel.app/wedding2/${id}/${encTypeLower}/${encName}`;
 
     case 7:
-      // Event 7: wedding3/[eventId]/[invitationtype]/[guestname]
+    case 8:
+      // Event 7 & 8: wedding3/[eventId]/[invitationtype]/[guestname]
       return `https://wedding-invitation-sample-beta.vercel.app/wedding3/${id}/${encTypeLower}/${encName}`;
 
     default:

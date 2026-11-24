@@ -441,7 +441,7 @@ function NewInvitationContent() {
                             ? "Thanking Card (ThankingCard/Sample1/...)"
                             : selectedEvent.event_id === 5
                             ? "Wedding 2 (wedding2/...)"
-                            : selectedEvent.event_id === 7
+                            : selectedEvent.event_id === 7 || selectedEvent.event_id === 8
                             ? "Wedding 3 (wedding3/...)"
                             : "Wedding 3 (wedding3/...)"}
                         </strong>
