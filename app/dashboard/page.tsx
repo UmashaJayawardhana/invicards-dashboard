@@ -356,6 +356,27 @@ export default function DashboardPage() {
       const guestToken = crypto.randomUUID();
       const name = quickGuestName.trim();
 
+      // If matched by email, ensure owner_user_id is synced to this user's ID
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user && targetEventId) {
+        const { data: ev } = await supabase
+          .from("events")
+          .select("owner_user_id, email")
+          .eq("event_id", targetEventId)
+          .maybeSingle();
+
+        if (
+          ev &&
+          user.email &&
+          ev.email?.trim().toLowerCase() === user.email?.trim().toLowerCase() &&
+          ev.owner_user_id !== user.id
+        ) {
+          await supabase.from("events").update({ owner_user_id: user.id }).eq("event_id", targetEventId);
+        }
+      }
+
       const { data: newGuest, error: insertError } = await supabase
         .from("wedding_invitations")
         .insert({
@@ -381,9 +402,11 @@ export default function DashboardPage() {
         setInvitations((prev) => [newGuest as DashboardInvitation, ...prev]);
       }
     } catch (err) {
-      setQuickMessage(
-        err instanceof Error ? err.message : "Failed to create invitation URL."
-      );
+      const errorMsg =
+        (err as { message?: string })?.message ||
+        (err instanceof Error ? err.message : null) ||
+        "Failed to create invitation URL.";
+      setQuickMessage(errorMsg);
     } finally {
       setQuickLoading(false);
     }

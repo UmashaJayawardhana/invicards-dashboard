@@ -204,9 +204,15 @@ function NewInvitationContent() {
           throw new Error("You do not have permission to create invitations for this event.");
         }
 
-        // If matched by email but owner_user_id was not set, auto-link it!
-        if (!ownedEvent.owner_user_id && user.id) {
-          void supabase.from("events").update({ owner_user_id: user.id }).eq("event_id", selectedEvent.event_id);
+        // If matched by email, ensure owner_user_id is synced to this user's ID
+        if (ownedEvent.owner_user_id !== user.id && user.id) {
+          const { error: syncErr } = await supabase
+            .from("events")
+            .update({ owner_user_id: user.id })
+            .eq("event_id", selectedEvent.event_id);
+          if (syncErr) {
+            console.warn("Could not sync owner_user_id on event:", syncErr);
+          }
         }
       }
 
@@ -266,11 +272,11 @@ function NewInvitationContent() {
         hint: (err as { hint?: string })?.hint,
       });
 
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to generate the invitation."
-      );
+      const errorMsg =
+        (err as { message?: string })?.message ||
+        (err instanceof Error ? err.message : null) ||
+        "Unable to generate the invitation. Please try again.";
+      setError(errorMsg);
     } finally {
       setGenerating(false);
     }
